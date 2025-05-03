@@ -1,0 +1,3 @@
+Hello world This test
+Punctuation should removed
+Short words
