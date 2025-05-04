@@ -31,7 +31,7 @@ namespace TextProcessor.Tests
         {
             int stringUtf8Length = System.Text.Encoding.UTF8.GetByteCount(stringToRepeat + "\n");
             int numberOfStrings = sizeInMb * 1024 * 1024 / stringUtf8Length;
-        
+
             using (var fileStream = new FileStream(filePath, FileMode.Create))
             using (var writer = new StreamWriter(fileStream))
             {
@@ -53,14 +53,37 @@ namespace TextProcessor.Tests
                 }
             }
         }
+        private async Task<bool> checkProcessLines(string[] inputLines, string[] expectedLines, int minWordLength, bool removePunctuation, int numberOfThreads = 1)
+        {
+            var processor = new TextFileProcessor(
+                string.Empty,
+                string.Empty,
+                minWordLength,
+                removePunctuation,
+                numberOfThreads);
+            var processedLines = await processor.ProcessLines(inputLines);
 
-
+            if (expectedLines.Length != processedLines.Length)
+            {
+                return false;
+            }
+            for (int i = 0; i < processedLines.Length; i++)
+            {
+                if (!expectedLines[i].Equals(processedLines[i]))
+                {
+                    Console.WriteLine("expected *" + expectedLines[i] + "* is not equal to *" + processedLines[i] + "*");
+                    return false;
+                }
+            }
+            return true;
+        }
 
         [Fact]
-        public async Task ProcessFileAsync_Empty() {
+        public async Task ProcessFileAsync_EmptyFile()
+        {
             string inputPath = Path.Combine(TestDirectory, "empty.txt");
             string outputPath = Path.Combine(OutputDirectory, "output_empty.txt");
-            string[] empty = new string[] { "" };
+            string[] empty = Array.Empty<string>();
             createFileWithLines(inputPath, empty);
             var processor1Thread = new TextFileProcessor(
                 inputPath,
@@ -75,28 +98,48 @@ namespace TextProcessor.Tests
             Assert.Empty(processedLines);
         }
 
-        
+        [Fact]
+        public async Task ProcessLinesAsync_Test_Hellow_World()
+        {
+            string[] lines = new string[] { "Hellow, World!" };
+
+            for (int i = 0; i < 6; i++)
+            {
+                Assert.True(await checkProcessLines(lines, lines, i, false));
+                Assert.True(await checkProcessLines(lines, new string[] { "Hellow World" }, i, true));
+            }
+
+            Assert.True(await checkProcessLines(lines, new string[] { "Hellow, !" }, 6, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "Hellow " }, 6, true));
+
+            Assert.True(await checkProcessLines(lines, new string[] { ", !" }, 7, false));
+            Assert.True(await checkProcessLines(lines, new string[] { " " }, 7, true));
+        }
 
         [Fact]
-        public async Task ProcessFileAsync_Test_Hellow_World() {
-            string inputPath = Path.Combine(TestDirectory, "hello_world.txt");
-            string outputPath = Path.Combine(OutputDirectory, "output_hello_world.txt");
-            string[] empty = new string[] { "Hello, World!" };
-            createFileWithLines(inputPath, empty);
-            var processor1Thread = new TextFileProcessor(
-                inputPath,
-                outputPath,
-                numberOfThreads: 1,
-                minWordLength: 5,
-                removePunctuation: false);
+        public async Task ProcessLinesAsync_Diff_Len_Words()
+        {
+            string[] lines = new string[] { "a  aa    aaa!? & aaaa aaa?aa" };
 
-            await processor1Thread.ProcessFileAsync();
+            Assert.True(await checkProcessLines(lines, new string[] { "a  aa    aaa!? & aaaa aaa?aa" }, 1, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "a  aa    aaa  aaaa aaaaa" }, 1, true));
 
-            var processedLines = readTextFile(outputPath);
-            Assert.Single(processedLines);
-            Assert.Equal("Hello, World!", processedLines[0]);
+            Assert.True(await checkProcessLines(lines, new string[] { "  aa    aaa!? & aaaa aaa?aa" }, 2, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "  aa    aaa  aaaa aaaaa" }, 2, true));
+
+            Assert.True(await checkProcessLines(lines, new string[] { "      aaa!? & aaaa aaa?" }, 3, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "      aaa  aaaa aaa" }, 3, true));
+
+            Assert.True(await checkProcessLines(lines, new string[] { "      !? & aaaa ?" }, 4, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "        aaaa " }, 4, true));
+
+            Assert.True(await checkProcessLines(lines, new string[] { "      !? &  ?" }, 5, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "         " }, 5, true));
+
+            Assert.True(await checkProcessLines(lines, new string[] { "      !? &  ?" }, 10, false));
+            Assert.True(await checkProcessLines(lines, new string[] { "         " }, 10, true));
         }
-      
+
         [Fact]
         public async Task ProcessFileAsync_HugeFile_100mb()
         {
@@ -125,7 +168,7 @@ namespace TextProcessor.Tests
             await processor8Threads.ProcessFileAsync();
 
             long time8Threads = processor8Threads.ProcessingTime;
-            
+
             Assert.True(time1Thread > time8Threads);
         }
 
@@ -162,11 +205,11 @@ namespace TextProcessor.Tests
 
         public void Dispose()
         {
-            // // Cleanup test files after tests
-            // if (Directory.Exists(TestDirectory))
-            // {
-            //     Directory.Delete(TestDirectory, true);
-            // }
+            // Cleanup test files after tests
+            if (Directory.Exists(TestDirectory))
+            {
+                Directory.Delete(TestDirectory, true);
+            }
         }
     }
 }

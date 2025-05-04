@@ -8,7 +8,7 @@ class Program
         using var test = new TextFileProcessorTests();
         try
         {
-            await test.ProcessFileAsync_Test_Hellow_World();
+            await test.ProcessLinesAsync_Test_Hellow_World();
             Console.WriteLine("Test completed successfully");
         }
         catch (Exception ex)

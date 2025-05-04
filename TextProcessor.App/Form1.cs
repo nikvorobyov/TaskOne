@@ -205,14 +205,14 @@ public partial class Form1 : Form
             _processor = new TextFileProcessor(
                 inputTextBox.Text,
                 outputTextBox.Text,
-                (int)threadsNumeric.Value,
                 (int)minLengthNumeric.Value,
-                removePunctuationCheck.Checked);
+                removePunctuationCheck.Checked,
+                (int)threadsNumeric.Value);
 
             await _processor.ProcessFileAsync();
 
             // Show statistics
-            statisticsBox.Text = _processor.Statistics.ToString();
+            statisticsBox.Text = _processor.ProcessingTime.ToString();
         }
         catch (Exception ex)
         {
