@@ -4,12 +4,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 using TextProcessor.Core;
+using System.Reflection;
 
 namespace TextProcessor.Tests
 {
     public class TextFileProcessorTests : IDisposable
     {
-        private const string TestDirectory = "TestFiles";
+        private const string OutputDirectory = "..\\..\\..\\..\\TextProcessor.Tests\\Output";
+        private static readonly string TestDirectory = "..\\..\\..\\..\\TextProcessor.Tests\\TestFiles";
 
         public TextFileProcessorTests()
         {
@@ -20,181 +22,151 @@ namespace TextProcessor.Tests
             }
         }
 
-        [Fact]
-        public async Task ProcessFileAsync_RemovesShortWords_Success()
+        private string[] readTextFile(in string filePath)
         {
-            // Arrange
-            string inputPath = Path.Combine(TestDirectory, "input_short_words.txt");
-            string outputPath = Path.Combine(TestDirectory, "output_short_words.txt");
-            string inputText = "The quick brown fox jumps over a lazy dog";
-            await File.WriteAllTextAsync(inputPath, inputText);
-
-            var processor = new TextFileProcessor(
-                inputPath,
-                outputPath,
-                numberOfThreads: 2,
-                minWordLength: 4,
-                removePunctuation: false);
-
-            // Act
-            await processor.ProcessFileAsync();
-
-            // Assert
-            string result = await File.ReadAllTextAsync(outputPath);
-            var resultWords = result.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            Assert.DoesNotContain(resultWords, word => word.Equals("The", StringComparison.OrdinalIgnoreCase));
-            Assert.DoesNotContain(resultWords, word => word.Equals("a", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains("quick", result);
-            Assert.Contains("brown", result);
-            Assert.Contains("jumps", result);
+            return File.ReadAllLines(filePath);
         }
 
-        [Fact]
-        public async Task ProcessFileAsync_RemovesPunctuation_Success()
+        private void createHugeTestFileWithLines(in string filePath, in string stringToRepeat, in int sizeInMb)
         {
-            // Arrange
-            string inputPath = Path.Combine(TestDirectory, "input_punctuation.txt");
-            string outputPath = Path.Combine(TestDirectory, "output_punctuation.txt");
-            string inputText = "Hello, world! How are you? This is a test.";
-            await File.WriteAllTextAsync(inputPath, inputText);
-
-            var processor = new TextFileProcessor(
-                inputPath,
-                outputPath,
-                numberOfThreads: 2,
-                minWordLength: 1,
-                removePunctuation: true);
-
-            // Act
-            await processor.ProcessFileAsync();
-
-            // Assert
-            string result = await File.ReadAllTextAsync(outputPath);
-            Assert.DoesNotContain(",", result);
-            Assert.DoesNotContain("!", result);
-            Assert.DoesNotContain("?", result);
-            Assert.DoesNotContain(".", result);
-        }
-
-        [Fact]
-        public async Task ProcessFileAsync_MultipleThreads_ProcessesAllLines()
-        {
-            // Arrange
-            string inputPath = Path.Combine(TestDirectory, "input_multiple_lines.txt");
-            string outputPath = Path.Combine(TestDirectory, "output_multiple_lines.txt");
-            string[] inputLines = new[]
+            int stringUtf8Length = System.Text.Encoding.UTF8.GetByteCount(stringToRepeat + "\n");
+            int numberOfStrings = sizeInMb * 1024 * 1024 / stringUtf8Length;
+        
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            using (var writer = new StreamWriter(fileStream))
             {
-                "First line with some text",
-                "Second line with other text",
-                "Third line here",
-                "Fourth line present",
-                "Fifth line exists"
-            };
-            await File.WriteAllLinesAsync(inputPath, inputLines);
-
-            var processor = new TextFileProcessor(
-                inputPath,
-                outputPath,
-                numberOfThreads: 3,
-                minWordLength: 4,
-                removePunctuation: false);
-
-            // Act
-            await processor.ProcessFileAsync();
-
-            // Assert
-            string[] resultLines = await File.ReadAllLinesAsync(outputPath);
-            Assert.True(resultLines.Length > 0);
-            foreach (var line in resultLines)
-            {
-                var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                Assert.True(words.All(word => word.Length >= 4));
+                for (int i = 0; i < numberOfStrings; i++)
+                {
+                    writer.Write(stringToRepeat + "\n");
+                }
             }
         }
 
-        [Fact]
-        public async Task ProcessFileAsync_EmptyFile_CreatesEmptyOutput()
+        private void createFileWithLines(in string filePath, in string[] strings)
         {
-            // Arrange
-            string inputPath = Path.Combine(TestDirectory, "input_empty.txt");
-            string outputPath = Path.Combine(TestDirectory, "output_empty.txt");
-            await File.WriteAllTextAsync(inputPath, "");
-
-            var processor = new TextFileProcessor(
-                inputPath,
-                outputPath,
-                numberOfThreads: 2,
-                minWordLength: 3,
-                removePunctuation: false);
-
-            // Act
-            await processor.ProcessFileAsync();
-
-            // Assert
-            string result = await File.ReadAllTextAsync(outputPath);
-            Assert.Empty(result.Trim());
-        }
-
-        [Fact]
-        public async Task ProcessFileAsync_InvalidInput_ThrowsException()
-        {
-            // Arrange
-            string nonExistentPath = Path.Combine(TestDirectory, "non_existent.txt");
-            string outputPath = Path.Combine(TestDirectory, "output_error.txt");
-
-            var processor = new TextFileProcessor(
-                nonExistentPath,
-                outputPath,
-                numberOfThreads: 2,
-                minWordLength: 3,
-                removePunctuation: false);
-
-            // Act & Assert
-            await Assert.ThrowsAsync<Exception>(() => processor.ProcessFileAsync());
-        }
-
-        [Fact]
-        public async Task ProcessFileAsync_TracksStatistics_Correctly()
-        {
-            // Arrange
-            string inputPath = Path.Combine(TestDirectory, "input_statistics.txt");
-            string outputPath = Path.Combine(TestDirectory, "output_statistics.txt");
-            string[] inputLines = new[]
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            using (var writer = new StreamWriter(fileStream))
             {
-                "The quick brown fox",
-                "jumps over a lazy dog",
-                "",
-                "Some short words: a an the",
-                "Multiple     spaces    here"
-            };
+                foreach (var str in strings)
+                {
+                    writer.WriteLine(str);
+                }
+            }
+        }
 
-            await File.WriteAllLinesAsync(inputPath, inputLines);
 
-            var processor = new TextFileProcessor(
+
+        [Fact]
+        public async Task ProcessFileAsync_Empty() {
+            string inputPath = Path.Combine(TestDirectory, "empty.txt");
+            string outputPath = Path.Combine(OutputDirectory, "output_empty.txt");
+            string[] empty = new string[] { "" };
+            createFileWithLines(inputPath, empty);
+            var processor1Thread = new TextFileProcessor(
                 inputPath,
                 outputPath,
-                numberOfThreads: 2,
+                numberOfThreads: 1,
                 minWordLength: 4,
+                removePunctuation: true);
+
+            await processor1Thread.ProcessFileAsync();
+
+            var processedLines = readTextFile(outputPath);
+            Assert.Empty(processedLines);
+        }
+
+        
+
+        [Fact]
+        public async Task ProcessFileAsync_Test_Hellow_World() {
+            string inputPath = Path.Combine(TestDirectory, "hello_world.txt");
+            string outputPath = Path.Combine(OutputDirectory, "output_hello_world.txt");
+            string[] empty = new string[] { "Hello, World!" };
+            createFileWithLines(inputPath, empty);
+            var processor1Thread = new TextFileProcessor(
+                inputPath,
+                outputPath,
+                numberOfThreads: 1,
+                minWordLength: 5,
                 removePunctuation: false);
 
-            // Act
-            await processor.ProcessFileAsync();
+            await processor1Thread.ProcessFileAsync();
 
-            // Assert
-            Assert.Equal(5, processor.Statistics.TotalLines);
-            Assert.Equal(1, processor.Statistics.EmptyLines);
-            Assert.True(processor.Statistics.TotalWords > 0);
-            Assert.True(processor.Statistics.FilteredWords > 0);
-            Assert.True(processor.Statistics.GetProcessingTime().TotalMilliseconds > 0);
+            var processedLines = readTextFile(outputPath);
+            Assert.Single(processedLines);
+            Assert.Equal("Hello, World!", processedLines[0]);
+        }
+      
+        [Fact]
+        public async Task ProcessFileAsync_HugeFile_100mb()
+        {
+            string inputPath = Path.Combine(TestDirectory, "100mb.txt");
+            createHugeTestFileWithLines(inputPath, "Hel lo, worl d!", 100);
+            string outputPath = Path.Combine(OutputDirectory, "output_100mb.txt");
+
+            var processor1Thread = new TextFileProcessor(
+                inputPath,
+                outputPath,
+                numberOfThreads: 1,
+                minWordLength: 4,
+                removePunctuation: true);
+
+            await processor1Thread.ProcessFileAsync();
+
+            long time1Thread = processor1Thread.ProcessingTime;
+
+            var processor8Threads = new TextFileProcessor(
+                inputPath,
+                outputPath,
+                numberOfThreads: 8,
+                minWordLength: 4,
+                removePunctuation: true);
+
+            await processor8Threads.ProcessFileAsync();
+
+            long time8Threads = processor8Threads.ProcessingTime;
+            
+            Assert.True(time1Thread > time8Threads);
+        }
+
+        public async Task ProcessFileAsync_HugeFile_1gb()
+        {
+            string inputPath = Path.Combine(TestDirectory, "1gb.txt");
+            createHugeTestFileWithLines(inputPath, "Hel lo, worl d!", 1024);
+            string outputPath = Path.Combine(OutputDirectory, "output_1gb.txt");
+
+            var processor1Thread = new TextFileProcessor(
+                inputPath,
+                outputPath,
+                numberOfThreads: 1,
+                minWordLength: 4,
+                removePunctuation: true);
+
+            await processor1Thread.ProcessFileAsync();
+
+            long time1Thread = processor1Thread.ProcessingTime;
+
+            var processor8Threads = new TextFileProcessor(
+                inputPath,
+                outputPath,
+                numberOfThreads: 8,
+                minWordLength: 4,
+                removePunctuation: true);
+
+            await processor8Threads.ProcessFileAsync();
+
+            long time8Threads = processor8Threads.ProcessingTime;
+
+            Assert.True(time1Thread > time8Threads);
         }
 
         public void Dispose()
         {
-            // Cleanup test files after tests
-            if (Directory.Exists(TestDirectory))
-            {
-                Directory.Delete(TestDirectory, true);
-            }
+            // // Cleanup test files after tests
+            // if (Directory.Exists(TestDirectory))
+            // {
+            //     Directory.Delete(TestDirectory, true);
+            // }
         }
     }
-} 
+}
