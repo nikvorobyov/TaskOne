@@ -1,11 +1,5 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
+
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Diagnostics;
 
 namespace TextProcessor.Core
@@ -35,7 +29,7 @@ namespace TextProcessor.Core
             _numberOfThreads = numberOfThreads;
         }
 
-        private async Task<string[]> readAllLinesFromFile()
+        private async Task<string[]> ReadAllLinesFromFile()
         {
             try
             {
@@ -62,7 +56,7 @@ namespace TextProcessor.Core
 
         }
 
-        private async void writeStringsToFile(string[] processedLines)
+        private async Task WriteStringsToFile(string[] processedLines)
         {
             try
             {
@@ -73,7 +67,7 @@ namespace TextProcessor.Core
                 Console.WriteLine($"File writing completed in {writingStopwatch.ElapsedMilliseconds}ms");
                 Console.WriteLine();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 throw new Exception($"Error writing file: {_outputFilePath}", ex);
             }
@@ -83,18 +77,19 @@ namespace TextProcessor.Core
             try
             {
                 var totalStopwatch = Stopwatch.StartNew();
-               
-                // Read all lines from the input file
-                string[] allLines = await readAllLinesFromFile();
 
-                if ( allLines.Length < 1 )
+                // Read all lines from the input file
+                string[] allLines = await ReadAllLinesFromFile();
+
+                if (allLines.Length < 1)
                 {
-                    writeStringsToFile(Array.Empty<string>());
+                    await WriteStringsToFile(Array.Empty<string>());
+                    return;
                 }
 
                 var processedLines = await ProcessLines(allLines);
 
-                writeStringsToFile(processedLines);
+                await WriteStringsToFile(processedLines);
 
             }
             catch (Exception ex)
@@ -103,7 +98,7 @@ namespace TextProcessor.Core
             }
         }
 
-        //It's public for comfortable testing
+        //It's public for testing
         public async Task<string[]> ProcessLines(string[] lines)
         {
 
@@ -117,52 +112,34 @@ namespace TextProcessor.Core
             Console.WriteLine($"Processing {lines.Length} lines using {actualThreads} threads");
 
             // Process parts of lines in different threads
-            if (actualThreads > 1)
+
+            // Create tasks for parallel processing
+            var tasks = new List<Task<string[]>>(actualThreads);
+
+            for (int i = 0; i < actualThreads; i++)
             {
-                // Create tasks for parallel processing
-                var tasks = new List<Task<string[]>>(actualThreads - 1);
+                int startIndex = i * linesPerThread;
+                int endIndex = Math.Min(startIndex + linesPerThread, lines.Length);
 
-                for (int i = 0; i < actualThreads - 1; i++)
-                {
-                    int startIndex = i * linesPerThread;
-                    int endIndex = Math.Min(startIndex + linesPerThread, lines.Length);
-
-                    var groupOfLines = lines[startIndex..endIndex];
-                    tasks.Add(Task.Run(() => ProcessGroupOfLines(groupOfLines)));
-                }
-
-                int lastStartIndex = (actualThreads - 1) * linesPerThread;
-                int lastEndIndex = Math.Min(lastStartIndex + linesPerThread, lines.Length);
-                var lastSpan = lines[lastStartIndex..lastEndIndex];
-                string[] lastLines = ProcessGroupOfLines(lastSpan);
-
-                // Wait for all tasks to complete
-                await Task.WhenAll(tasks);
-
-                processingStopwatch.Stop();
-                ProcessingTime = processingStopwatch.ElapsedMilliseconds;
-                Console.WriteLine($"Processing completed in {ProcessingTime}ms");
-                Console.WriteLine();
-
-                return tasks.SelectMany(t => t.Result).OrderBy(x => x).Concat(lastLines).ToArray();
+                var groupOfLines = lines[startIndex..endIndex];
+                tasks.Add(Task.Run(() => ProcessGroupOfLines(groupOfLines)));
             }
-            else
-            {
-                string[] processedLines = ProcessGroupOfLines(lines);
+            // Wait for all tasks to complete
+            await Task.WhenAll(tasks);
+
+            processingStopwatch.Stop();
+            ProcessingTime = processingStopwatch.ElapsedMilliseconds;
+            Console.WriteLine($"Processing completed in {ProcessingTime}ms");
+            Console.WriteLine();
+
+            return tasks.SelectMany(t => t.Result).OrderBy(x => x).ToArray();
 
 
-                processingStopwatch.Stop();
-                ProcessingTime = processingStopwatch.ElapsedMilliseconds;
-                Console.WriteLine($"Processing completed in {ProcessingTime}ms");
-                Console.WriteLine();
-
-                return processedLines;
-            }
         }
         private string[] ProcessGroupOfLines(in string[] lines)
         {
             Console.WriteLine($"Process lines in thread {Thread.CurrentThread.ManagedThreadId}.");
-            
+
             var processedLines = new string[lines.Length];
             for (var i = 0; i < lines.Length; i++)
             {
@@ -183,52 +160,36 @@ namespace TextProcessor.Core
 
         private string ProcessLine(in string line)
         {
+            // Return empty string if input line is null or empty
             if (string.IsNullOrEmpty(line))
                 return string.Empty;
 
-            // Найдём все слова (любая буквенно-цифровая последовательность)
+            // Sequences of word characters
             string pattern = @"\b\w+\b";
 
+            // Process each word in the line
             string result = Regex.Replace(line, pattern, match =>
             {
                 string word = match.Value;
 
+                // Remove words that are shorter than minimum length
                 if (word.Length < _minWordLength)
                 {
-                    // Удаляем слово полностью
                     return "";
                 }
                 else
                 {
-                    // Оставляем слово как есть
                     return word;
                 }
             });
 
+            // Remove all punctuation marks if _removePunctuation is true
             if (_removePunctuation)
             {
-                // Убираем знаки препинания, но пробелы оставляем
                 result = Regex.Replace(result, @"[^\w\s]", "");
             }
 
             return result;
-            //if (string.IsNullOrEmpty(line))
-            //    return string.Empty;
-
-            //// Удаляем слова длиной <= minWordLength
-            //string pattern = $@"\b\w{{,{_minWordLength + 1}}}\b";
-            //string result = Regex.Replace(line, pattern, "");
-
-            //if (_removePunctuation)
-            //{
-            //    // Убираем знаки препинания, оставляем пробелы
-            //    result = Regex.Replace(result, @"[^\w\s]", "");
-            //}
-
-            //// Опционально: убрать лишние пробелы (если нужно красивое оформление)
-            ////result = Regex.Replace(result, @"\s+", " ").Trim();
-
-            //return result;
         }
     }
 }

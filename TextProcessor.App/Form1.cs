@@ -1,17 +1,20 @@
 using TextProcessor.Core;
+using System.Diagnostics;
 
 namespace TextProcessor.App;
 
 public partial class Form1 : Form
 {
     private TextFileProcessor? _processor;
-    private TextBox inputTextBox;
-    private TextBox outputTextBox;
+    private ListBox inputFilesListBox;
+    private TextBox outputDirectoryTextBox;
     private NumericUpDown threadsNumeric;
     private NumericUpDown minLengthNumeric;
     private CheckBox removePunctuationCheck;
     private TextBox statisticsBox;
     private Button processButton;
+    private Button addFilesButton;
+    private Button clearFilesButton;
 
     public Form1()
     {
@@ -22,43 +25,50 @@ public partial class Form1 : Form
     private void SetupCustomControls()
     {
         this.Text = "Text File Processor";
-        this.Size = new Size(800, 600);
+        this.Size = new Size(800, 1000);
         this.FormBorderStyle = FormBorderStyle.FixedDialog;
         this.MaximizeBox = false;
 
-        // Input file selection
+        // Input files list
         var inputLabel = new Label
         {
-            Text = "Input File:",
+            Text = "Input Files:",
             Location = new Point(20, 20),
             AutoSize = true
         };
 
-        inputTextBox = new TextBox
+        inputFilesListBox = new ListBox
         {
             Location = new Point(20, 40),
-            Width = 600,
-            ReadOnly = true
+            Size = new Size(600, 150),
+            SelectionMode = SelectionMode.MultiExtended
         };
 
-        var inputButton = new Button
+        addFilesButton = new Button
         {
-            Text = "Browse...",
-            Location = new Point(630, 38),
+            Text = "Add Files...",
+            Location = new Point(630, 40),
             Width = 100
         };
 
-        // Output file selection
+        clearFilesButton = new Button
+        {
+            Text = "Clear",
+            Location = new Point(630, 70),
+            Width = 100
+        };
+
+        // Output directory selection
         var outputLabel = new Label
         {
-            Text = "Output File:",
-            Location = new Point(20, 70),
+            Text = "Output Directory:",
+            Location = new Point(20, 200),
             AutoSize = true
         };
 
-        outputTextBox = new TextBox
+        outputDirectoryTextBox = new TextBox
         {
-            Location = new Point(20, 90),
+            Location = new Point(20, 220),
             Width = 600,
             ReadOnly = true
         };
@@ -66,7 +76,7 @@ public partial class Form1 : Form
         var outputButton = new Button
         {
             Text = "Browse...",
-            Location = new Point(630, 88),
+            Location = new Point(630, 218),
             Width = 100
         };
 
@@ -74,7 +84,7 @@ public partial class Form1 : Form
         var settingsGroup = new GroupBox
         {
             Text = "Processing Settings",
-            Location = new Point(20, 130),
+            Location = new Point(20, 260),
             Size = new Size(710, 150)
         };
 
@@ -127,8 +137,8 @@ public partial class Form1 : Form
         // Statistics output
         statisticsBox = new TextBox
         {
-            Location = new Point(20, 300),
-            Size = new Size(710, 200),
+            Location = new Point(20, 430),
+            Size = new Size(710, 400),
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical
@@ -137,8 +147,8 @@ public partial class Form1 : Form
         // Process button
         processButton = new Button
         {
-            Text = "Process File",
-            Location = new Point(20, 520),
+            Text = "Process Files",
+            Location = new Point(20, 850),
             Width = 710,
             Height = 30
         };
@@ -146,52 +156,70 @@ public partial class Form1 : Form
         // Add all controls to form
         this.Controls.AddRange(new Control[]
         {
-            inputLabel, inputTextBox, inputButton,
-            outputLabel, outputTextBox, outputButton,
+            inputLabel, inputFilesListBox, addFilesButton, clearFilesButton,
+            outputLabel, outputDirectoryTextBox, outputButton,
             settingsGroup,
             statisticsBox,
             processButton
         });
 
         // Wire up events
-        inputButton.Click += InputButton_Click;
+        addFilesButton.Click += AddFilesButton_Click;
+        clearFilesButton.Click += ClearFilesButton_Click;
         outputButton.Click += OutputButton_Click;
         processButton.Click += ProcessButton_Click;
     }
 
-    private void InputButton_Click(object? sender, EventArgs e)
+    private void AddFilesButton_Click(object? sender, EventArgs e)
     {
         using var dialog = new OpenFileDialog
         {
             Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-            Title = "Select Input File"
+            Title = "Select Input Files",
+            Multiselect = true
         };
 
         if (dialog.ShowDialog() == DialogResult.OK)
         {
-            inputTextBox.Text = dialog.FileName;
+            foreach (string file in dialog.FileNames)
+            {
+                if (!inputFilesListBox.Items.Contains(file))
+                {
+                    inputFilesListBox.Items.Add(file);
+                }
+            }
         }
+    }
+
+    private void ClearFilesButton_Click(object? sender, EventArgs e)
+    {
+        inputFilesListBox.Items.Clear();
     }
 
     private void OutputButton_Click(object? sender, EventArgs e)
     {
-        using var dialog = new SaveFileDialog
+        using var dialog = new FolderBrowserDialog
         {
-            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
-            Title = "Select Output File"
+            Description = "Select Output Directory"
         };
 
         if (dialog.ShowDialog() == DialogResult.OK)
         {
-            outputTextBox.Text = dialog.FileName;
+            outputDirectoryTextBox.Text = dialog.SelectedPath;
         }
     }
 
     private async void ProcessButton_Click(object? sender, EventArgs e)
     {
-        if (string.IsNullOrEmpty(inputTextBox.Text) || string.IsNullOrEmpty(outputTextBox.Text))
+        if (inputFilesListBox.Items.Count == 0)
         {
-            MessageBox.Show("Please select both input and output files.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Please select at least one input file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(outputDirectoryTextBox.Text))
+        {
+            MessageBox.Show("Please select output directory.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
@@ -199,28 +227,57 @@ public partial class Form1 : Form
         {
             // Disable controls during processing
             processButton.Enabled = false;
+            addFilesButton.Enabled = false;
+            clearFilesButton.Enabled = false;
             statisticsBox.Text = "Processing...";
             Application.DoEvents();
 
-            _processor = new TextFileProcessor(
-                inputTextBox.Text,
-                outputTextBox.Text,
-                (int)minLengthNumeric.Value,
-                removePunctuationCheck.Checked,
-                (int)threadsNumeric.Value);
+            var totalStopwatch = Stopwatch.StartNew();
+            var results = new List<string>();
+            var tasks = new List<Task<(string fileName, long processingTime)>>();
 
-            await _processor.ProcessFileAsync();
+            // Create tasks for each file
+            foreach (string inputFile in inputFilesListBox.Items)
+            {
+                string fileName = Path.GetFileName(inputFile);
+                string outputFile = Path.Combine(outputDirectoryTextBox.Text, fileName);
 
-            // Show statistics
-            statisticsBox.Text = _processor.ProcessingTime.ToString();
+                var processor = new TextFileProcessor(
+                    inputFile,
+                    outputFile,
+                    (int)minLengthNumeric.Value,
+                    removePunctuationCheck.Checked,
+                    (int)threadsNumeric.Value);
+
+                tasks.Add(Task.Run(async () =>
+                {
+                    await processor.ProcessFileAsync();
+                    return (fileName, processor.ProcessingTime);
+                }));
+            }
+
+            // Wait for all tasks to complete
+            var completedTasks = await Task.WhenAll(tasks);
+
+            // Process results
+            foreach (var result in completedTasks)
+            {
+                results.Add($"Processed {result.fileName} in {result.processingTime}ms");
+            }
+
+            totalStopwatch.Stop();
+            results.Add($"\nTotal processing time: {totalStopwatch.ElapsedMilliseconds}ms\n");
+            statisticsBox.Text = string.Join("\n", results);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Error processing file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show($"Error processing files: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
             processButton.Enabled = true;
+            addFilesButton.Enabled = true;
+            clearFilesButton.Enabled = true;
         }
     }
 }
