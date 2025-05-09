@@ -1,3 +1,8 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Xunit;
 using TextProcessor.Core;
 
 
@@ -54,13 +59,23 @@ namespace TextProcessor.Tests
         }
         private async Task<bool> CheckProcessLines(string[] inputLines, string[] expectedLines, int minWordLength, bool removePunctuation, int numberOfThreads = 1)
         {
+            string inputPath = Path.Combine(TestDirectory, "temp.txt");
+            string outputPath = Path.Combine(OutputDirectory, "output_temp.txt");
+
+            CreateFileWithLines(inputPath, inputLines);
             var processor = new TextFileProcessor(
-                string.Empty,
-                string.Empty,
+                inputPath,
+                outputPath,
                 minWordLength,
                 removePunctuation,
                 numberOfThreads);
-            var processedLines = await processor.ProcessLines(inputLines);
+            await processor.ProcessFileAsync();
+
+            var processedLines = ReadTextFile(outputPath);
+            
+            //remove files after test
+            File.Delete(inputPath);
+            File.Delete(outputPath);
 
             if (expectedLines.Length != processedLines.Length)
             {
@@ -74,6 +89,7 @@ namespace TextProcessor.Tests
                     return false;
                 }
             }
+
             return true;
         }
 
@@ -171,7 +187,7 @@ namespace TextProcessor.Tests
 
             Assert.True(time1Thread > time8Threads);
         }
-        
+
         public async Task ProcessFileAsync_HugeFile_1gb()
         {
             string inputPath = Path.Combine(TestDirectory, "1gb.txt");

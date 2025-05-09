@@ -1,4 +1,3 @@
-
 using System.Text.RegularExpressions;
 using System.Diagnostics;
 
@@ -11,6 +10,7 @@ namespace TextProcessor.Core
         private readonly int _numberOfThreads;
         private readonly int _minWordLength;
         private readonly bool _removePunctuation;
+        private const int CHUNK_SIZE = 1000000; // Number of lines per chunk for parallel processing
 
         //for testing
         public long ProcessingTime { get; private set; }
@@ -29,68 +29,45 @@ namespace TextProcessor.Core
             _numberOfThreads = numberOfThreads;
         }
 
-        private async Task<string[]> ReadAllLinesFromFile()
-        {
-            try
-            {
-                var readingStopwatch = Stopwatch.StartNew();
-                Console.WriteLine();
-                Console.WriteLine($"Start reading file {_inputFilePath}.");
-
-                // Read all lines from the input file
-                string[] allLines = await File.ReadAllLinesAsync(_inputFilePath);
-
-                if (allLines.Length < 1)
-                {
-                    return Array.Empty<string>();
-                }
-                readingStopwatch.Stop();
-                Console.WriteLine($"File reading completed in {readingStopwatch.ElapsedMilliseconds}ms");
-                Console.WriteLine();
-                return allLines;
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error reading file: {_inputFilePath}", ex);
-            }
-
-        }
-
-        private async Task WriteStringsToFile(string[] processedLines)
-        {
-            try
-            {
-                var writingStopwatch = Stopwatch.StartNew();
-                Console.WriteLine($"Start writing file {_outputFilePath}.");
-                await File.WriteAllLinesAsync(_outputFilePath, processedLines);
-                writingStopwatch.Stop();
-                Console.WriteLine($"File writing completed in {writingStopwatch.ElapsedMilliseconds}ms");
-                Console.WriteLine();
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Error writing file: {_outputFilePath}", ex);
-            }
-        }
         public async Task ProcessFileAsync()
         {
             try
             {
                 var totalStopwatch = Stopwatch.StartNew();
+                using var reader = new StreamReader(_inputFilePath);
+                using var writer = new StreamWriter(_outputFilePath, false);
 
-                // Read all lines from the input file
-                string[] allLines = await ReadAllLinesFromFile();
-
-                if (allLines.Length < 1)
+                var chunk = new List<string>(CHUNK_SIZE);
+                string? line;
+                while ((line = await reader.ReadLineAsync()) != null)
                 {
-                    await WriteStringsToFile(Array.Empty<string>());
-                    return;
+                    chunk.Add(line);
+                    if (chunk.Count >= CHUNK_SIZE)
+                    {
+                        var processed = await ProcessLinesChunkAsync(chunk);
+                        foreach (var processedLine in processed)
+                        {
+                            if (!string.IsNullOrEmpty(processedLine)) {
+                                await writer.WriteLineAsync(processedLine);
+                            }
+                        }
+                        chunk.Clear();
+                    }
                 }
-
-                var processedLines = await ProcessLines(allLines);
-
-                await WriteStringsToFile(processedLines);
-
+                // Process remaining lines
+                if (chunk.Count > 0)
+                {
+                    var processed = await ProcessLinesChunkAsync(chunk);
+                    foreach (var processedLine in processed)
+                    {
+                        if (!string.IsNullOrEmpty(processedLine))
+                        {
+                            await writer.WriteLineAsync(processedLine);
+                        }
+                    }
+                }
+                totalStopwatch.Stop();
+                ProcessingTime = totalStopwatch.ElapsedMilliseconds;
             }
             catch (Exception ex)
             {
@@ -98,48 +75,27 @@ namespace TextProcessor.Core
             }
         }
 
-        //It's public for testing
-        public async Task<string[]> ProcessLines(string[] lines)
+        // Process a chunk of lines in parallel and return processed lines
+        private async Task<string[]> ProcessLinesChunkAsync(List<string> lines)
         {
-
-            var processingStopwatch = Stopwatch.StartNew();
-
-            // Calculate lines per thread
-            int linesPerThread = (int)Math.Ceiling((double)lines.Length / _numberOfThreads);
-
-            // Calculate actual number of threads needed
-            int actualThreads = (int)Math.Ceiling((double)lines.Length / linesPerThread);
-            Console.WriteLine($"Processing {lines.Length} lines using {actualThreads} threads");
-
-            // Process parts of lines in different threads
-
-            // Create tasks for parallel processing
-            var tasks = new List<Task<string[]>>(actualThreads);
-
-            for (int i = 0; i < actualThreads; i++)
+            int linesPerThread = (int)Math.Ceiling((double)lines.Count / _numberOfThreads);
+            var tasks = new List<Task<string[]>>();
+            for (int i = 0; i < _numberOfThreads; i++)
             {
                 int startIndex = i * linesPerThread;
-                int endIndex = Math.Min(startIndex + linesPerThread, lines.Length);
-
-                var groupOfLines = lines[startIndex..endIndex];
-                tasks.Add(Task.Run(() => ProcessGroupOfLines(groupOfLines)));
+                int endIndex = Math.Min(startIndex + linesPerThread, lines.Count);
+                if (startIndex >= endIndex) {
+                    break;
+                }
+                var chunk = lines.GetRange(startIndex, endIndex - startIndex);
+                tasks.Add(Task.Run(() => ProcessGroupOfLines(chunk.ToArray())));
             }
-            // Wait for all tasks to complete
-            await Task.WhenAll(tasks);
-
-            processingStopwatch.Stop();
-            ProcessingTime = processingStopwatch.ElapsedMilliseconds;
-            Console.WriteLine($"Processing completed in {ProcessingTime}ms");
-            Console.WriteLine();
-
-            return tasks.SelectMany(t => t.Result).OrderBy(x => x).ToArray();
-
-
+            var results = await Task.WhenAll(tasks);
+            return results.SelectMany(x => x).ToArray();
         }
+
         private string[] ProcessGroupOfLines(in string[] lines)
         {
-            Console.WriteLine($"Process lines in thread {Thread.CurrentThread.ManagedThreadId}.");
-
             var processedLines = new string[lines.Length];
             for (var i = 0; i < lines.Length; i++)
             {
@@ -148,7 +104,6 @@ namespace TextProcessor.Core
                 {
                     continue;
                 }
-
                 string processedLine = ProcessLine(line);
                 if (!string.IsNullOrEmpty(processedLine))
                 {
@@ -164,7 +119,7 @@ namespace TextProcessor.Core
             if (string.IsNullOrEmpty(line))
                 return string.Empty;
 
-            // Sequences of word characters
+            // Pattern to match whole words (sequences of word characters)
             string pattern = @"\b\w+\b";
 
             // Process each word in the line

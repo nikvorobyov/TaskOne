@@ -266,8 +266,8 @@ public partial class Form1 : Form
             }
 
             totalStopwatch.Stop();
-            results.Add($"\nTotal processing time: {totalStopwatch.ElapsedMilliseconds}ms\n");
-            statisticsBox.Text = string.Join("\n", results);
+            results.Add($"Total processing time: {totalStopwatch.ElapsedMilliseconds}ms");
+            statisticsBox.Text = string.Join("  ", results);
         }
         catch (Exception ex)
         {
