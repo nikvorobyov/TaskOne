@@ -18,7 +18,7 @@ namespace TextProcessor.Core
             bool removePunctuation,
             int numberOfThreads = 1)
         {
-            if (minWordLength < 1)
+            if (minWordLength < 0)
                 throw new ArgumentOutOfRangeException(nameof(minWordLength), "Minimum word length must be at least 1.");
             if (numberOfThreads < 1)
                 throw new ArgumentOutOfRangeException(nameof(numberOfThreads), "Number of threads must be at least 1.");
