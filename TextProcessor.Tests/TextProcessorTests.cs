@@ -41,6 +41,24 @@ namespace TextProcessor.Tests
             }
         }
 
+        private bool compareStrings(in string[] expectedLines, in string[] processedLines)
+        {
+            if (expectedLines.Length != processedLines.Length)
+            {
+                return false;
+            }
+            for (int i = 0; i < processedLines.Length; i++)
+            {
+                if (!expectedLines[i].Equals(processedLines[i]))
+                {
+                    Console.WriteLine("expected *" + expectedLines[i] + "* is not equal to *" + processedLines[i] + "*");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private static void CreateFileWithLines(in string filePath, in string[] strings)
         {
             using (var fileStream = new FileStream(filePath, FileMode.Create))
@@ -51,6 +69,17 @@ namespace TextProcessor.Tests
                     writer.WriteLine(str);
                 }
             }
+        }
+        private async Task<bool> CheckProcessFile(int numberOfThreads, int minWordLength, bool removePunctuation, string inputFilePath, string outputFilePath, string[] expectedLines)
+        {
+            var processorThread = new Core.TextProcessor(
+                numberOfThreads: numberOfThreads,
+                minWordLength: minWordLength,
+                removePunctuation: removePunctuation);
+
+            await processorThread.ProcessFileAsync(inputFilePath, outputFilePath);
+            var processedLines = ReadTextFile(outputFilePath);
+            return compareStrings(expectedLines, processedLines);
         }
         private async Task<bool> CheckProcessLines(string[] inputLines, string[] expectedLines, int minWordLength, bool removePunctuation, int numberOfThreads = 1)
         {
@@ -77,20 +106,7 @@ namespace TextProcessor.Tests
             if (processedLines.Length > 0 && processedLines[^1] == "")
                 processedLines = processedLines[..^1];
 
-            if (expectedLines.Length != processedLines.Length)
-            {
-                return false;
-            }
-            for (int i = 0; i < processedLines.Length; i++)
-            {
-                if (!expectedLines[i].Equals(processedLines[i]))
-                {
-                    Console.WriteLine("expected *" + expectedLines[i] + "* is not equal to *" + processedLines[i] + "*");
-                    return false;
-                }
-            }
-
-            return true;
+            return compareStrings(expectedLines, processedLines);
         }
 
         [Fact]
@@ -130,6 +146,43 @@ namespace TextProcessor.Tests
         }
 
         [Fact]
+        public async Task ProcessFileAsync_Test_Hellow_World()
+        {
+            string[] lines = new string[] { "Hellow, World!" };
+
+            string inputPath = Path.Combine(TestDirectory, "input_hellow_world.txt");
+            string outputPath = Path.Combine(OutputDirectory, "output_hellow_world.txt");
+
+            CreateFileWithLines(inputPath, lines);
+
+            for (int i = 0; i < 6; i++)
+            {
+                Assert.True(await CheckProcessFile(1, i, false, inputPath, outputPath, lines));
+                Assert.True(await CheckProcessFile(4, i, false, inputPath, outputPath, lines));
+
+                Assert.True(await CheckProcessFile(1, i, true, inputPath, outputPath, new string[] { "Hellow World" }));
+                Assert.True(await CheckProcessFile(4, i, true, inputPath, outputPath, new string[] { "Hellow World" }));
+            }
+
+            Assert.True(await CheckProcessFile(1, 6, false, inputPath, outputPath, new string[] { "Hellow, !" }));
+            Assert.True(await CheckProcessFile(4, 6, false, inputPath, outputPath, new string[] { "Hellow, !" }));
+            Assert.True(await CheckProcessFile(1, 6, true, inputPath, outputPath, new string[] { "Hellow " }));
+            Assert.True(await CheckProcessFile(4, 6, true, inputPath, outputPath, new string[] { "Hellow " }));
+
+            Assert.True(await CheckProcessFile(1, 7, false, inputPath, outputPath, new string[] { ", !" }));
+            Assert.True(await CheckProcessFile(4, 7, false, inputPath, outputPath, new string[] { ", !" }));
+
+            Assert.True(await CheckProcessFile(1, 7, true, inputPath, outputPath, new string[] { " " }));
+            Assert.True(await CheckProcessFile(4, 7, true, inputPath, outputPath, new string[] { " " }));
+
+            Assert.True(await CheckProcessFile(1, 7, false, inputPath, outputPath, new string[] { ", !" }));
+            Assert.True(await CheckProcessFile(4, 7, false, inputPath, outputPath, new string[] { ", !" }));
+
+            Assert.True(await CheckProcessFile(1, 7, true, inputPath, outputPath, new string[] { " " }));
+            Assert.True(await CheckProcessFile(4, 7, true, inputPath, outputPath, new string[] { " " }));
+        }
+
+        [Fact]
         public async Task ProcessLinesAsync_Diff_Len_Words()
         {
             string[] lines = new string[] { "a  aa    aaa!? & aaaa aaa?aa" };
@@ -153,8 +206,83 @@ namespace TextProcessor.Tests
             Assert.True(await CheckProcessLines(lines, new string[] { "         " }, 10, true));
         }
 
+        private string[] getArrayOfRepeatedLines(in string line, in int numberOfLines)
+        {
+            string[] lines = new string[numberOfLines];
+            for (int i = 0; i < numberOfLines; i++)
+            {
+                lines[i] = line;
+            }
+            return lines;
+        }
+
         [Fact]
-        public async Task ProcessFileAsync_HugeFile_100mb()
+        public async Task ProcessFileAsync_Diff_Len_Words()
+        {
+            string repeatedLine = "a  aa    aaa!? & aaaa aaa?aa";
+
+            string[] lines = getArrayOfRepeatedLines(repeatedLine, 50);
+
+            string inputPath = Path.Combine(TestDirectory, "input_diff_len_words.txt");
+            string outputPath = Path.Combine(OutputDirectory, "output_diff_len_words.txt");
+
+            CreateFileWithLines(inputPath, lines);
+
+            string[] expectedLines1Punct = getArrayOfRepeatedLines("a  aa    aaa!? & aaaa aaa?aa", 50);
+            string[] expectedLines1NonPunct = getArrayOfRepeatedLines("a  aa    aaa  aaaa aaaaa", 50);
+
+            string[] expectedLines2Punct = getArrayOfRepeatedLines("  aa    aaa!? & aaaa aaa?aa", 50);
+            string[] expectedLines2NonPunct = getArrayOfRepeatedLines("  aa    aaa  aaaa aaaaa", 50);
+
+            string[] expectedLines3Punct = getArrayOfRepeatedLines("      aaa!? & aaaa aaa?", 50);
+            string[] expectedLines3NonPunct = getArrayOfRepeatedLines("      aaa  aaaa aaa", 50);
+
+            string[] expectedLines4Punct = getArrayOfRepeatedLines("      !? & aaaa ?", 50);
+            string[] expectedLines4NonPunct = getArrayOfRepeatedLines("        aaaa ", 50);
+
+            string[] expectedLines5Punct = getArrayOfRepeatedLines("      !? &  ?", 50);
+            string[] expectedLines5NonPunct = getArrayOfRepeatedLines("         ", 50);
+
+            // Also check different number of threads
+            Assert.True(await CheckProcessFile(1, 1, false, inputPath, outputPath, expectedLines1Punct));
+            Assert.True(await CheckProcessFile(4, 1, false, inputPath, outputPath, expectedLines1Punct));
+
+            Assert.True(await CheckProcessFile(1, 1, true, inputPath, outputPath, expectedLines1NonPunct));
+            Assert.True(await CheckProcessFile(4, 1, true, inputPath, outputPath, expectedLines1NonPunct));
+
+            Assert.True(await CheckProcessFile(1, 2, false, inputPath, outputPath, expectedLines2Punct));
+            Assert.True(await CheckProcessFile(4, 2, false, inputPath, outputPath, expectedLines2Punct));
+
+            Assert.True(await CheckProcessFile(1, 2, true, inputPath, outputPath, expectedLines2NonPunct));
+            Assert.True(await CheckProcessFile(4, 2, true, inputPath, outputPath, expectedLines2NonPunct));
+
+            Assert.True(await CheckProcessFile(1, 3, false, inputPath, outputPath, expectedLines3Punct));
+            Assert.True(await CheckProcessFile(4, 3, false, inputPath, outputPath, expectedLines3Punct));
+
+            Assert.True(await CheckProcessFile(1, 3, true, inputPath, outputPath, expectedLines3NonPunct));
+            Assert.True(await CheckProcessFile(4, 3, true, inputPath, outputPath, expectedLines3NonPunct));
+
+            Assert.True(await CheckProcessFile(1, 4, false, inputPath, outputPath, expectedLines4Punct));
+            Assert.True(await CheckProcessFile(4, 4, false, inputPath, outputPath, expectedLines4Punct));
+
+            Assert.True(await CheckProcessFile(1, 4, true, inputPath, outputPath, expectedLines4NonPunct));
+            Assert.True(await CheckProcessFile(4, 4, true, inputPath, outputPath, expectedLines4NonPunct));
+
+            Assert.True(await CheckProcessFile(1, 5, false, inputPath, outputPath, expectedLines5Punct));
+            Assert.True(await CheckProcessFile(4, 5, false, inputPath, outputPath, expectedLines5Punct));
+
+            Assert.True(await CheckProcessFile(1, 5, true, inputPath, outputPath, expectedLines5NonPunct));
+            Assert.True(await CheckProcessFile(4, 5, true, inputPath, outputPath, expectedLines5NonPunct));
+
+            Assert.True(await CheckProcessFile(1, 10, false, inputPath, outputPath, expectedLines5Punct));
+            Assert.True(await CheckProcessFile(4, 10, false, inputPath, outputPath, expectedLines5Punct));
+
+            Assert.True(await CheckProcessFile(1, 10, true, inputPath, outputPath, expectedLines5NonPunct));
+            Assert.True(await CheckProcessFile(4, 10, true, inputPath, outputPath, expectedLines5NonPunct));
+        }
+
+        [Fact]
+        public async Task ProcessFileAsync_Check_Performance_HugeFile_100mb()
         {
             string inputPath = Path.Combine(TestDirectory, "100mb.txt");
             CreateHugeTestFileWithLines(inputPath, "Hel lo, worl d!", 100);
@@ -182,7 +310,7 @@ namespace TextProcessor.Tests
             Assert.True(time1Thread > time8Threads);
         }
 
-        public async Task ProcessFileAsync_HugeFile_1gb()
+        public async Task ProcessFileAsync_Check_Performance_HugeFile_1gb()
         {
             string inputPath = Path.Combine(TestDirectory, "1gb.txt");
             CreateHugeTestFileWithLines(inputPath, "Hel lo, worl d!", 1024);

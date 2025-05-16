@@ -18,12 +18,20 @@ namespace TextProcessor.Core
             bool removePunctuation,
             int numberOfThreads = 1)
         {
+            if (minWordLength < 1)
+                throw new ArgumentOutOfRangeException(nameof(minWordLength), "Minimum word length must be at least 1.");
+            if (numberOfThreads < 1)
+                throw new ArgumentOutOfRangeException(nameof(numberOfThreads), "Number of threads must be at least 1.");
             _minWordLength = minWordLength;
             _removePunctuation = removePunctuation;
             _numberOfThreads = numberOfThreads;
         }
         public async Task ProcessStreamAsync(Stream inputStream, Stream outputStream)
         {
+            if (inputStream == null)
+                throw new ArgumentNullException(nameof(inputStream), "Input stream cannot be null.");
+            if (outputStream == null)
+                throw new ArgumentNullException(nameof(outputStream), "Output stream cannot be null.");
             try
             {
                 var totalStopwatch = Stopwatch.StartNew();
@@ -71,6 +79,17 @@ namespace TextProcessor.Core
         }
         public async Task ProcessFileAsync(string inputFilePath, string outputFilePath)
         {
+            if (string.IsNullOrWhiteSpace(inputFilePath))
+                throw new ArgumentException("Input file path cannot be null or empty.", nameof(inputFilePath));
+            if (string.IsNullOrWhiteSpace(outputFilePath))
+                throw new ArgumentException("Output file path cannot be null or empty.", nameof(outputFilePath));
+
+            // Check if input and output files are the same
+            string inputFullPath = Path.GetFullPath(inputFilePath);
+            string outputFullPath = Path.GetFullPath(outputFilePath);
+            if (string.Equals(inputFullPath, outputFullPath, StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Input and output file paths must not be the same. Please select a different output file or directory.");
+
             try
             {
                 using var reader = new StreamReader(inputFilePath);

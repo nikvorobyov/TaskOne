@@ -1,4 +1,4 @@
-
+﻿
 using TextProcessor.Tests;
 
 class Program
@@ -8,7 +8,7 @@ class Program
         using var test = new TextProcessorTests();
         try
         {
-            await test.ProcessFileAsync_HugeFile_1gb();
+            await test.ProcessFileAsync_Check_Performance_HugeFile_1gb();
             Console.WriteLine("Test completed successfully");
         }
         catch (Exception ex)
