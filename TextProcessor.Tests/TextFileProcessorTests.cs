@@ -1,4 +1,3 @@
-
 using TextProcessor.Core;
 
 
@@ -55,23 +54,28 @@ namespace TextProcessor.Tests
         }
         private async Task<bool> CheckProcessLines(string[] inputLines, string[] expectedLines, int minWordLength, bool removePunctuation, int numberOfThreads = 1)
         {
-            string inputPath = Path.Combine(TestDirectory, "temp.txt");
-            string outputPath = Path.Combine(OutputDirectory, "output_temp.txt");
+            // Prepare input stream from inputLines
+            var inputText = string.Join(Environment.NewLine, inputLines);
+            var inputBytes = System.Text.Encoding.UTF8.GetBytes(inputText);
+            using var inputStream = new MemoryStream(inputBytes);
 
-            CreateFileWithLines(inputPath, inputLines);
+            // Prepare output stream
+            using var outputStream = new MemoryStream();
+
             var processor = new TextFileProcessor(
-                inputPath,
-                outputPath,
                 minWordLength,
                 removePunctuation,
                 numberOfThreads);
-            await processor.ProcessFileAsync();
+            await processor.ProcessStreamAsync(inputStream, outputStream);
 
-            var processedLines = ReadTextFile(outputPath);
-            
-            //remove files after test
-            File.Delete(inputPath);
-            File.Delete(outputPath);
+            // Read processed lines from output stream
+            outputStream.Position = 0;
+            using var reader = new StreamReader(outputStream);
+            var processedText = await reader.ReadToEndAsync();
+            var processedLines = processedText.Split(new[] { Environment.NewLine }, StringSplitOptions.None);
+            // // Remove possible trailing empty line due to WriteLineAsync
+            if (processedLines.Length > 0 && processedLines[^1] == "")
+                processedLines = processedLines[..^1];
 
             if (expectedLines.Length != processedLines.Length)
             {
@@ -97,13 +101,11 @@ namespace TextProcessor.Tests
             string[] empty = Array.Empty<string>();
             CreateFileWithLines(inputPath, empty);
             var processor1Thread = new TextFileProcessor(
-                inputPath,
-                outputPath,
                 numberOfThreads: 1,
                 minWordLength: 4,
                 removePunctuation: true);
 
-            await processor1Thread.ProcessFileAsync();
+            await processor1Thread.ProcessFileAsync(inputPath, outputPath);
 
             var processedLines = ReadTextFile(outputPath);
             Assert.Empty(processedLines);
@@ -160,24 +162,20 @@ namespace TextProcessor.Tests
             string outputPath8 = Path.Combine(OutputDirectory, "output_100mb_8.txt");
 
             var processor1Thread = new TextFileProcessor(
-                inputPath,
-                outputPath1,
                 numberOfThreads: 1,
                 minWordLength: 4,
                 removePunctuation: true);
 
-            await processor1Thread.ProcessFileAsync();
+            await processor1Thread.ProcessFileAsync(inputPath, outputPath1);
 
             long time1Thread = processor1Thread.ProcessingTime;
 
             var processor8Threads = new TextFileProcessor(
-                inputPath,
-                outputPath8,
                 numberOfThreads: 8,
                 minWordLength: 4,
                 removePunctuation: true);
 
-            await processor8Threads.ProcessFileAsync();
+            await processor8Threads.ProcessFileAsync(inputPath, outputPath8);
 
             long time8Threads = processor8Threads.ProcessingTime;
 
@@ -191,24 +189,20 @@ namespace TextProcessor.Tests
             string outputPath = Path.Combine(OutputDirectory, "output_1gb.txt");
 
             var processor1Thread = new TextFileProcessor(
-                inputPath,
-                outputPath,
                 numberOfThreads: 1,
                 minWordLength: 4,
                 removePunctuation: true);
 
-            await processor1Thread.ProcessFileAsync();
+            await processor1Thread.ProcessFileAsync(inputPath, outputPath);
 
             long time1Thread = processor1Thread.ProcessingTime;
 
             var processor8Threads = new TextFileProcessor(
-                inputPath,
-                outputPath,
                 numberOfThreads: 8,
                 minWordLength: 4,
                 removePunctuation: true);
 
-            await processor8Threads.ProcessFileAsync();
+            await processor8Threads.ProcessFileAsync(inputPath, outputPath);
 
             long time8Threads = processor8Threads.ProcessingTime;
 

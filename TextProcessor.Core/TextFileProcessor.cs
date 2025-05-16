@@ -5,8 +5,6 @@ namespace TextProcessor.Core
 {
     public class TextFileProcessor
     {
-        private readonly string _inputFilePath;
-        private readonly string _outputFilePath;
         private readonly int _numberOfThreads;
         private readonly int _minWordLength;
         private readonly bool _removePunctuation;
@@ -16,26 +14,21 @@ namespace TextProcessor.Core
         public long ProcessingTime { get; private set; }
 
         public TextFileProcessor(
-            string inputFilePath,
-            string outputFilePath,
             int minWordLength,
             bool removePunctuation,
             int numberOfThreads = 1)
         {
-            _inputFilePath = inputFilePath;
-            _outputFilePath = outputFilePath;
             _minWordLength = minWordLength;
             _removePunctuation = removePunctuation;
             _numberOfThreads = numberOfThreads;
         }
-
-        public async Task ProcessFileAsync()
+        public async Task ProcessStreamAsync(Stream inputStream, Stream outputStream)
         {
             try
             {
                 var totalStopwatch = Stopwatch.StartNew();
-                using var reader = new StreamReader(_inputFilePath);
-                using var writer = new StreamWriter(_outputFilePath, false);
+                using var reader = new StreamReader(inputStream);
+                using var writer = new StreamWriter(outputStream, leaveOpen: true);
 
                 var chunk = new List<string>(CHUNK_SIZE);
                 string? line;
@@ -47,7 +40,8 @@ namespace TextProcessor.Core
                         var processed = await ProcessLinesChunkAsync(chunk);
                         foreach (var processedLine in processed)
                         {
-                            if (!string.IsNullOrEmpty(processedLine)) {
+                            if (!string.IsNullOrEmpty(processedLine))
+                            {
                                 await writer.WriteLineAsync(processedLine);
                             }
                         }
@@ -66,8 +60,22 @@ namespace TextProcessor.Core
                         }
                     }
                 }
+                await writer.FlushAsync();
                 totalStopwatch.Stop();
                 ProcessingTime = totalStopwatch.ElapsedMilliseconds;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error processing stream: {ex.Message}", ex);
+            }
+        }
+        public async Task ProcessFileAsync(string inputFilePath, string outputFilePath)
+        {
+            try
+            {
+                using var reader = new StreamReader(inputFilePath);
+                using var writer = new StreamWriter(outputFilePath, false);
+                await ProcessStreamAsync(reader.BaseStream, writer.BaseStream);
             }
             catch (Exception ex)
             {
@@ -84,7 +92,8 @@ namespace TextProcessor.Core
             {
                 int startIndex = i * linesPerThread;
                 int endIndex = Math.Min(startIndex + linesPerThread, lines.Count);
-                if (startIndex >= endIndex) {
+                if (startIndex >= endIndex)
+                {
                     break;
                 }
                 var chunk = lines.GetRange(startIndex, endIndex - startIndex);

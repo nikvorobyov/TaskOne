@@ -127,8 +127,8 @@ public partial class Form1 : Form
         };
 
         // Add controls to settings group
-        settingsGroup.Controls.AddRange(new Control[] 
-        { 
+        settingsGroup.Controls.AddRange(new Control[]
+        {
             threadsLabel, threadsNumeric,
             minLengthLabel, minLengthNumeric,
             removePunctuationCheck
@@ -243,15 +243,13 @@ public partial class Form1 : Form
                 string outputFile = Path.Combine(outputDirectoryTextBox.Text, fileName);
 
                 var processor = new TextFileProcessor(
-                    inputFile,
-                    outputFile,
                     (int)minLengthNumeric.Value,
                     removePunctuationCheck.Checked,
                     (int)threadsNumeric.Value);
 
                 tasks.Add(Task.Run(async () =>
                 {
-                    await processor.ProcessFileAsync();
+                    await processor.ProcessFileAsync(inputFile, outputFile);
                     return (fileName, processor.ProcessingTime);
                 }));
             }
