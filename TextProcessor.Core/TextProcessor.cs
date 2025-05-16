@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace TextProcessor.Core
 {
-    public class TextFileProcessor
+    public class TextProcessor
     {
         private readonly int _numberOfThreads;
         private readonly int _minWordLength;
@@ -13,7 +13,7 @@ namespace TextProcessor.Core
         //for testing
         public long ProcessingTime { get; private set; }
 
-        public TextFileProcessor(
+        public TextProcessor(
             int minWordLength,
             bool removePunctuation,
             int numberOfThreads = 1)

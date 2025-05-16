@@ -5,7 +5,7 @@ namespace TextProcessor.App;
 
 public partial class Form1 : Form
 {
-    private TextFileProcessor? _processor;
+    private Core.TextProcessor? _processor;
     private ListBox inputFilesListBox;
     private TextBox outputDirectoryTextBox;
     private NumericUpDown threadsNumeric;
@@ -242,7 +242,7 @@ public partial class Form1 : Form
                 string fileName = Path.GetFileName(inputFile);
                 string outputFile = Path.Combine(outputDirectoryTextBox.Text, fileName);
 
-                var processor = new TextFileProcessor(
+                var processor = new Core.TextProcessor(
                     (int)minLengthNumeric.Value,
                     removePunctuationCheck.Checked,
                     (int)threadsNumeric.Value);

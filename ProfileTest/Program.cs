@@ -5,7 +5,7 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        using var test = new TextFileProcessorTests();
+        using var test = new TextProcessorTests();
         try
         {
             await test.ProcessFileAsync_HugeFile_1gb();

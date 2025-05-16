@@ -3,12 +3,12 @@ using TextProcessor.Core;
 
 namespace TextProcessor.Tests
 {
-    public class TextFileProcessorTests : IDisposable
+    public class TextProcessorTests : IDisposable
     {
         private const string OutputDirectory = "..\\..\\..\\..\\TextProcessor.Tests\\Output";
         private static readonly string TestDirectory = "..\\..\\..\\..\\TextProcessor.Tests\\TestFiles";
 
-        public TextFileProcessorTests()
+        public TextProcessorTests()
         {
             // Create test directory if it doesn't exist
             if (!Directory.Exists(TestDirectory))
@@ -62,7 +62,7 @@ namespace TextProcessor.Tests
             // Prepare output stream
             using var outputStream = new MemoryStream();
 
-            var processor = new TextFileProcessor(
+            var processor = new Core.TextProcessor(
                 minWordLength,
                 removePunctuation,
                 numberOfThreads);
@@ -100,7 +100,7 @@ namespace TextProcessor.Tests
             string outputPath = Path.Combine(OutputDirectory, "output_empty.txt");
             string[] empty = Array.Empty<string>();
             CreateFileWithLines(inputPath, empty);
-            var processor1Thread = new TextFileProcessor(
+            var processor1Thread = new Core.TextProcessor(
                 numberOfThreads: 1,
                 minWordLength: 4,
                 removePunctuation: true);
@@ -161,7 +161,7 @@ namespace TextProcessor.Tests
             string outputPath1 = Path.Combine(OutputDirectory, "output_100mb_1.txt");
             string outputPath8 = Path.Combine(OutputDirectory, "output_100mb_8.txt");
 
-            var processor1Thread = new TextFileProcessor(
+            var processor1Thread = new Core.TextProcessor(
                 numberOfThreads: 1,
                 minWordLength: 4,
                 removePunctuation: true);
@@ -170,7 +170,7 @@ namespace TextProcessor.Tests
 
             long time1Thread = processor1Thread.ProcessingTime;
 
-            var processor8Threads = new TextFileProcessor(
+            var processor8Threads = new Core.TextProcessor(
                 numberOfThreads: 8,
                 minWordLength: 4,
                 removePunctuation: true);
@@ -188,7 +188,7 @@ namespace TextProcessor.Tests
             CreateHugeTestFileWithLines(inputPath, "Hel lo, worl d!", 1024);
             string outputPath = Path.Combine(OutputDirectory, "output_1gb.txt");
 
-            var processor1Thread = new TextFileProcessor(
+            var processor1Thread = new Core.TextProcessor(
                 numberOfThreads: 1,
                 minWordLength: 4,
                 removePunctuation: true);
@@ -197,7 +197,7 @@ namespace TextProcessor.Tests
 
             long time1Thread = processor1Thread.ProcessingTime;
 
-            var processor8Threads = new TextFileProcessor(
+            var processor8Threads = new Core.TextProcessor(
                 numberOfThreads: 8,
                 minWordLength: 4,
                 removePunctuation: true);
