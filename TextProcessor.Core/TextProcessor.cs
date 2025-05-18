@@ -38,6 +38,7 @@ namespace TextProcessor.Core
                 using var reader = new StreamReader(inputStream);
                 using var writer = new StreamWriter(outputStream, leaveOpen: true);
 
+
                 var chunk = new List<string>(CHUNK_SIZE);
                 string? line;
                 while ((line = await reader.ReadLineAsync()) != null)
@@ -45,28 +46,14 @@ namespace TextProcessor.Core
                     chunk.Add(line);
                     if (chunk.Count >= CHUNK_SIZE)
                     {
-                        var processed = await ProcessLinesChunkAsync(chunk);
-                        foreach (var processedLine in processed)
-                        {
-                            if (!string.IsNullOrEmpty(processedLine))
-                            {
-                                await writer.WriteLineAsync(processedLine);
-                            }
-                        }
+                        await ProcessAndWriteChunkAsync(chunk, writer);
                         chunk.Clear();
                     }
                 }
                 // Process remaining lines
                 if (chunk.Count > 0)
                 {
-                    var processed = await ProcessLinesChunkAsync(chunk);
-                    foreach (var processedLine in processed)
-                    {
-                        if (!string.IsNullOrEmpty(processedLine))
-                        {
-                            await writer.WriteLineAsync(processedLine);
-                        }
-                    }
+                    await ProcessAndWriteChunkAsync(chunk, writer);
                 }
                 await writer.FlushAsync();
                 totalStopwatch.Stop();
@@ -173,6 +160,19 @@ namespace TextProcessor.Core
             }
 
             return result;
+        }
+
+        // Helper method to process a chunk and write non-empty lines to the writer
+        private async Task ProcessAndWriteChunkAsync(List<string> chunk, StreamWriter writer)
+        {
+            var processed = await ProcessLinesChunkAsync(chunk);
+            foreach (var processedLine in processed)
+            {
+                if (!string.IsNullOrEmpty(processedLine))
+                {
+                    await writer.WriteLineAsync(processedLine);
+                }
+            }
         }
     }
 }
