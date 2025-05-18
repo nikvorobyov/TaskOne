@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Diagnostics;
+using System.Text;
 
 namespace TextProcessor.Core
 {
@@ -12,6 +13,8 @@ namespace TextProcessor.Core
 
         //for testing
         public long ProcessingTime { get; private set; }
+
+        private static readonly char[] Separators = { ' ', '.', ',', ';', ':', '!', '?', '\n', '\r', '\t' };
 
         public TextProcessor(
             int minWordLength,
@@ -26,6 +29,61 @@ namespace TextProcessor.Core
             _removePunctuation = removePunctuation;
             _numberOfThreads = numberOfThreads;
         }
+        // Reads a block from the stream, ensuring it ends at a separator or throws if a word exceeds maxWordSize
+        private async Task<string?> ReadBlockAsync(StreamReader reader, int size = CHUNK_SIZE, int maxWordSize = 1024)
+        {
+            var buffer = new char[size];
+            int read = await reader.ReadAsync(buffer, 0, size);
+            if (read == 0)
+            {
+                return null;
+            }
+
+            var chunk = new StringBuilder(new string(buffer, 0, read));
+
+            // If the last character is a separator, return the block as is
+            if (Separators.Contains(chunk[chunk.Length - 1]))
+            {
+                return chunk.ToString();
+            }
+
+            int additionallyRead = 0;
+            // Read additional characters until a separator is found or maxWordSize is reached
+            while (additionallyRead < maxWordSize)
+            {
+                int nextChar = await reader.ReadAsync(buffer, 0, 1);
+                if (nextChar == 0)
+                {
+                    // End of stream
+                    break;
+                }
+
+                chunk.Append(buffer[0]);
+                additionallyRead++;
+
+                if (Separators.Contains(buffer[0]))
+                {
+                    return chunk.ToString();
+                }
+            }
+
+            if (additionallyRead >= maxWordSize)
+            {
+                throw new Exception($"Word exceeded maxWordSize ({maxWordSize} chars) without separator.");
+            }
+
+            // If we reached the end of the stream without finding a separator, return everything we have
+            return chunk.ToString();
+        }
+
+        // Asynchronously processes a block and writes the result
+        private async Task ProcessAndWriteBlockAsync(string block, StreamWriter writer)
+        {
+            // Split block into lines for compatibility with existing processing
+            var lines = block.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            await ProcessAndWriteChunkAsync(lines, writer);
+        }
+
         public async Task ProcessStreamAsync(Stream inputStream, Stream outputStream)
         {
             if (inputStream == null)
@@ -38,22 +96,10 @@ namespace TextProcessor.Core
                 using var reader = new StreamReader(inputStream);
                 using var writer = new StreamWriter(outputStream, leaveOpen: true);
 
-
-                var chunk = new List<string>(CHUNK_SIZE);
-                string? line;
-                while ((line = await reader.ReadLineAsync()) != null)
+                string block;
+                while ((block = await ReadBlockAsync(reader, CHUNK_SIZE, 1024)) != null)
                 {
-                    chunk.Add(line);
-                    if (chunk.Count >= CHUNK_SIZE)
-                    {
-                        await ProcessAndWriteChunkAsync(chunk, writer);
-                        chunk.Clear();
-                    }
-                }
-                // Process remaining lines
-                if (chunk.Count > 0)
-                {
-                    await ProcessAndWriteChunkAsync(chunk, writer);
+                    await ProcessAndWriteBlockAsync(block, writer);
                 }
                 await writer.FlushAsync();
                 totalStopwatch.Stop();
