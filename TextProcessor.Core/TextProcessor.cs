@@ -76,14 +76,53 @@ namespace TextProcessor.Core
             return chunk.ToString();
         }
 
+        // Split block into N sub-blocks, each ending at a separator
+        private List<string> SplitBlockForParallel(string block, int numBlocks)
+        {
+            var subBlocks = new List<string>();
+            if (string.IsNullOrEmpty(block) || numBlocks <= 1)
+            {
+                subBlocks.Add(block);
+                return subBlocks;
+            }
+            int approxSize = block.Length / numBlocks;
+            int start = 0;
+            for (int i = 1; i < numBlocks; i++)
+            {
+                int end = Math.Min(start + approxSize, block.Length - 1);
+                // Move right until the next separator is found
+                while (end < block.Length - 1 && !Separators.Contains(block[end]))
+                {
+                    end++;
+                }
+                // If no separator is found — everything until the end of the block
+                if (end >= block.Length - 1)
+                {
+                    end = block.Length - 1;
+                }
+                subBlocks.Add(block.Substring(start, end - start + 1));
+                start = end + 1;
+            }
+            // The last block — everything that is left
+            if (start < block.Length)
+                subBlocks.Add(block.Substring(start));
+            return subBlocks;
+        }
+
         // Asynchronously processes a block and writes the result
         private async Task ProcessAndWriteBlockAsync(string block, StreamWriter writer)
         {
-            // Split block into lines for compatibility with existing processing
-            var lines = block.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            await ProcessAndWriteChunkAsync(lines, writer);
+            var subBlocks = SplitBlockForParallel(block, _numberOfThreads);
+            var tasks = new List<Task<string>>();
+            foreach (var subBlock in subBlocks)
+            {
+                tasks.Add(Task.Run(() => ProcessString(subBlock)));
+            }
+            var results = await Task.WhenAll(tasks);
+            var processed = string.Concat(results.SelectMany(x => x));
+            if (!string.IsNullOrEmpty(processed))
+                await writer.WriteAsync(processed);
         }
-
         public async Task ProcessStreamAsync(Stream inputStream, Stream outputStream)
         {
             if (inputStream == null)
@@ -110,6 +149,7 @@ namespace TextProcessor.Core
                 throw new Exception($"Error processing stream: {ex.Message}", ex);
             }
         }
+
         public async Task ProcessFileAsync(string inputFilePath, string outputFilePath)
         {
             if (string.IsNullOrWhiteSpace(inputFilePath))
@@ -135,46 +175,7 @@ namespace TextProcessor.Core
             }
         }
 
-        // Process a chunk of lines in parallel and return processed lines
-        private async Task<string[]> ProcessLinesChunkAsync(List<string> lines)
-        {
-            int linesPerThread = (int)Math.Ceiling((double)lines.Count / _numberOfThreads);
-            var tasks = new List<Task<string[]>>();
-            for (int i = 0; i < _numberOfThreads; i++)
-            {
-                int startIndex = i * linesPerThread;
-                int endIndex = Math.Min(startIndex + linesPerThread, lines.Count);
-                if (startIndex >= endIndex)
-                {
-                    break;
-                }
-                var chunk = lines.GetRange(startIndex, endIndex - startIndex);
-                tasks.Add(Task.Run(() => ProcessGroupOfLines(chunk.ToArray())));
-            }
-            var results = await Task.WhenAll(tasks);
-            return results.SelectMany(x => x).ToArray();
-        }
-
-        private string[] ProcessGroupOfLines(in string[] lines)
-        {
-            var processedLines = new string[lines.Length];
-            for (var i = 0; i < lines.Length; i++)
-            {
-                var line = lines[i];
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    continue;
-                }
-                string processedLine = ProcessLine(line);
-                if (!string.IsNullOrEmpty(processedLine))
-                {
-                    processedLines[i] = processedLine;
-                }
-            }
-            return processedLines;
-        }
-
-        private string ProcessLine(in string line)
+        private string ProcessString(in string line)
         {
             // Return empty string if input line is null or empty
             if (string.IsNullOrEmpty(line))
@@ -206,19 +207,6 @@ namespace TextProcessor.Core
             }
 
             return result;
-        }
-
-        // Helper method to process a chunk and write non-empty lines to the writer
-        private async Task ProcessAndWriteChunkAsync(List<string> chunk, StreamWriter writer)
-        {
-            var processed = await ProcessLinesChunkAsync(chunk);
-            foreach (var processedLine in processed)
-            {
-                if (!string.IsNullOrEmpty(processedLine))
-                {
-                    await writer.WriteLineAsync(processedLine);
-                }
-            }
         }
     }
 }

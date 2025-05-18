@@ -337,6 +337,52 @@ namespace TextProcessor.Tests
             Assert.True(time1Thread > time8Threads);
         }
 
+        private string createStringWithRepeatingSymbols(in string symbols, in int numberOfSymbols)
+        {
+            string result = "";
+            for (int i = 0; i < numberOfSymbols; i++)
+            {
+                result += symbols;
+            }
+            return result;
+        }
+
+        private async Task<bool> CheckProcessString(string inputString, string expectedString, int minWordLength, bool removePunctuation, int numberOfThreads = 1)
+        {
+
+            var inputBytes = System.Text.Encoding.UTF8.GetBytes(inputString);
+            using var inputStream = new MemoryStream(inputBytes);
+
+            // Prepare output stream
+            using var outputStream = new MemoryStream();
+
+            var processor = new Core.TextProcessor(
+                minWordLength,
+                removePunctuation,
+                numberOfThreads);
+            await processor.ProcessStreamAsync(inputStream, outputStream);
+
+            // Read processed lines from output stream
+            outputStream.Position = 0;
+            using var reader = new StreamReader(outputStream);
+            var processedText = await reader.ReadToEndAsync();
+
+            return compareStrings(new string[] { expectedString }, new string[] { processedText });
+        }
+
+        [Fact]
+        public async Task ProcessFileAsync_Diff_Len_Words_Repeated_Symbols_In_One_Line()
+        {
+            string repeatedLine = "a  aa    aaa!? & aaaa aaa?aa ";
+
+            string line = createStringWithRepeatingSymbols(repeatedLine, 10000);
+
+            string expectedLine = createStringWithRepeatingSymbols("      !? &  ? ", 10000);
+
+            Assert.True(await CheckProcessString(line, expectedLine, 10, false, 1));
+            Assert.True(await CheckProcessString(line, expectedLine, 10, false, 4));
+        }
+
         public void Dispose()
         {
             // Cleanup test files after tests
